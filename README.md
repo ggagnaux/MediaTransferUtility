@@ -18,6 +18,11 @@ Media Transfer Utility is a Windows desktop app for organizing photos and videos
 - Light/Dark theme toggle
 - Window and option state persistence between app launches
 
+## Screenshot
+
+![Media Transfer Utility screenshot](Screenshots/2026-04-17%2014_28_49-Media%20Transfer%20Utility.png)
+
+
 ## Supported Media Types
 
 Images:
