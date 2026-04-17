@@ -65,7 +65,7 @@ From the project root:
 
 Application state is saved to:
 
-- `%LocalAppData%\MediaOrganizerApp\appstate.json`
+- `%LocalAppData%\MediaTransferUtility\appstate.json`
 
 ## Notes
 

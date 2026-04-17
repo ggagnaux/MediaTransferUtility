@@ -12,6 +12,7 @@ public sealed class TheForm : Form
     private const int BUTTON_WIDTH = 130;
     private const int BUTTON_HEIGHT= 36;
 
+    private const string APP_NAME = "MediaTransferUtility";
     private const string APP_TITLE = "Media Transfer Utility";
 
     private CancellationTokenSource? _cancellationTokenSource;
@@ -44,7 +45,7 @@ public sealed class TheForm : Form
     private readonly TableLayoutPanel _footerLayout = new();
     private static readonly string StateFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "MediaOrganizerApp",
+        APP_NAME,
         "appstate.json");
 
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
