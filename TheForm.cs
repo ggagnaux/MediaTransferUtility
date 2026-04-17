@@ -11,12 +11,17 @@ public sealed class TheForm : Form
 {
     private const int BUTTON_WIDTH = 130;
     private const int BUTTON_HEIGHT= 36;
+    private const int DETAILED_LOG_HEIGHT_DELTA = 287;
+    private const int DEFAULT_INITIAL_WINDOW_WIDTH = 1000;
+    private const int MIN_WINDOW_HEIGHT_WITH_LOG = 1166;
+    private const int MIN_WINDOW_HEIGHT_WITHOUT_LOG = 879;
 
     private const string APP_NAME = "MediaTransferUtility";
     private const string APP_TITLE = "Media Transfer Utility";
 
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isTransferInProgress;
+    private string? _currentSavedLogPath;
 
     private readonly Guna2TextBox _txtSource = CreateTextBox("Select source folder...");
     private readonly Guna2TextBox _txtDestination = CreateTextBox("Select destination folder...");
@@ -28,12 +33,14 @@ public sealed class TheForm : Form
     private readonly Guna2Button _btnCancel = CreateDangerButton("Cancel");
     private readonly Guna2Button _btnClose = CreateSecondaryButton("Close");
     private readonly Guna2Button _btnClearLog = CreateSecondaryButton("Clear Log");
+    private readonly Guna2Button _btnViewCurrentLog = CreateSecondaryButton("View Log");
 
     private readonly Guna2CheckBox _chkRemoveSource = CreateCheckBox("Remove source file after successful copy");
     private readonly Guna2CheckBox _chkCreateEdits = CreateCheckBox("Create 'Edits' folder");
     private readonly Guna2CheckBox _chkCreateFinal = CreateCheckBox("Create 'Final' folder");
     private readonly Guna2CheckBox _chkSaveLog = CreateCheckBox("Save log file after run");
     private readonly Guna2CheckBox _chkDarkTheme = CreateCheckBox("Theme: Dark mode");
+    private readonly Guna2CheckBox _chkShowDetailedLog = CreateCheckBox("Show detailed log panel");
 
     private readonly Guna2ProgressBar _progressBar = new();
     private readonly Guna2HtmlLabel _lblStatus = new();
@@ -42,6 +49,8 @@ public sealed class TheForm : Form
     private Guna2Panel? _optionsCard;
     private Guna2Panel? _progressCard;
     private Guna2Panel? _logCard;
+    private bool _isDetailedLogVisible = true;
+    private readonly TableLayoutPanel _mainLayout = new();
     private readonly TableLayoutPanel _footerLayout = new();
     private static readonly string StateFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -70,6 +79,7 @@ public sealed class TheForm : Form
             _chkDarkTheme.Checked = true;
         }
 
+        ApplyDetailedLogVisibility(_chkShowDetailedLog.Checked);
         ApplyTheme(_chkDarkTheme.Checked);
         UpdateLogUiState();
     }
@@ -81,23 +91,20 @@ public sealed class TheForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = true;
-        MinimumSize = new Size(1000, 760);
-        ClientSize = new Size(1320, 980);
+        MinimumSize = new Size(DEFAULT_INITIAL_WINDOW_WIDTH, MIN_WINDOW_HEIGHT_WITHOUT_LOG);
+        ClientSize = new Size(DEFAULT_INITIAL_WINDOW_WIDTH, 980);
         Font = new Font("Segoe UI", 8F, FontStyle.Regular, GraphicsUnit.Point);
 
-        var mainLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(20),
-            ColumnCount = 1,
-            RowCount = 6
-        };
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 220));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        _mainLayout.Dock = DockStyle.Fill;
+        _mainLayout.Padding = new Padding(20);
+        _mainLayout.ColumnCount = 1;
+        _mainLayout.RowCount = 6;
+        _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 220));
+        _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300));
+        _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+        _mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
         var header = new Guna2HtmlLabel
         {
@@ -118,23 +125,29 @@ public sealed class TheForm : Form
         _logCard = CreateCard("Detailed Log", CreateLogLayout());
 
         _footerLayout.ColumnCount = 2;
+        _footerLayout.RowCount = 1;
         _footerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _footerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180F));
+        _footerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _footerLayout.Dock = DockStyle.Fill;
-        //_footerLayout.Padding = new Padding(0, 4, 0, 0);
+        _footerLayout.Padding = new Padding(0, 6, 0, 0);
 
-        _btnClose.Dock = DockStyle.Right;
+        _btnClose.Dock = DockStyle.None;
+        _btnClose.Anchor = AnchorStyles.Right | AnchorStyles.Top;
         _btnClose.Size = new Size(100, BUTTON_HEIGHT);
+        _btnClose.MinimumSize = new Size(100, BUTTON_HEIGHT);
+        _btnClose.MaximumSize = new Size(100, BUTTON_HEIGHT);
+        _btnClose.Margin = new Padding(0);
         _footerLayout.Controls.Add(_btnClose, 1, 0);
 
-        mainLayout.Controls.Add(header, 0, 0);
-        mainLayout.Controls.Add(_foldersCard, 0, 1);
-        mainLayout.Controls.Add(_optionsCard, 0, 2);
-        mainLayout.Controls.Add(_progressCard, 0, 3);
-        mainLayout.Controls.Add(_logCard, 0, 4);
-        mainLayout.Controls.Add(_footerLayout, 0, 5);
+        _mainLayout.Controls.Add(header, 0, 0);
+        _mainLayout.Controls.Add(_foldersCard, 0, 1);
+        _mainLayout.Controls.Add(_optionsCard, 0, 2);
+        _mainLayout.Controls.Add(_progressCard, 0, 3);
+        _mainLayout.Controls.Add(_logCard, 0, 4);
+        _mainLayout.Controls.Add(_footerLayout, 0, 5);
 
-        Controls.Add(mainLayout);
+        Controls.Add(_mainLayout);
     }
 
     private Control CreateFoldersLayout()
@@ -234,6 +247,7 @@ public sealed class TheForm : Form
         checksPanel.Controls.Add(_chkCreateEdits);
         checksPanel.Controls.Add(_chkCreateFinal);
         checksPanel.Controls.Add(_chkSaveLog);
+        checksPanel.Controls.Add(_chkShowDetailedLog);
 
         var destinationPanel = new FlowLayoutPanel
         {
@@ -289,18 +303,30 @@ public sealed class TheForm : Form
         _lblStatus.AutoSize = false;
         _lblStatus.Margin = new Padding(0, 2, 0, 0);
 
+        _btnViewCurrentLog.AutoSize = false;
+        _btnViewCurrentLog.Size = new Size(120, BUTTON_HEIGHT);
+        _btnViewCurrentLog.MinimumSize = new Size(120, BUTTON_HEIGHT);
+        _btnViewCurrentLog.MaximumSize = new Size(120, BUTTON_HEIGHT);
+        _btnViewCurrentLog.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+        _btnViewCurrentLog.Visible = false;
+        _btnViewCurrentLog.Enabled = false;
+
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1,
+            ColumnCount = 2,
             RowCount = 2,
             Padding = new Padding(0, 12, 0, 0)
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
 
         layout.Controls.Add(_progressBar, 0, 0);
+        layout.SetColumnSpan(_progressBar, 2);
         layout.Controls.Add(_lblStatus, 0, 1);
+        layout.Controls.Add(_btnViewCurrentLog, 1, 1);
         return layout;
     }
 
@@ -362,9 +388,69 @@ public sealed class TheForm : Form
             _logGrid.Rows.Clear();
             UpdateLogUiState();
         };
+        _btnViewCurrentLog.Click += btnViewCurrentLog_Click;
         _chkDarkTheme.CheckedChanged += (_, _) => ApplyTheme(_chkDarkTheme.Checked);
+        _chkShowDetailedLog.CheckedChanged += (_, _) => ApplyDetailedLogVisibility(_chkShowDetailedLog.Checked);
+        _chkSaveLog.CheckedChanged += (_, _) => UpdateViewCurrentLogButtonState();
         FormClosing += GunaPrototypeForm_FormClosing;
         FormClosed += (_, _) => SaveState();
+    }
+
+    private void btnViewCurrentLog_Click(object? sender, EventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_currentSavedLogPath) || !File.Exists(_currentSavedLogPath))
+        {
+            MessageBox.Show("No saved log file is available yet.", "Log File", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            UpdateViewCurrentLogButtonState();
+            return;
+        }
+
+        try
+        {
+            var logContent = File.ReadAllText(_currentSavedLogPath);
+            using var dialog = CreateLogViewerDialog(logContent, _currentSavedLogPath, _chkDarkTheme.Checked);
+            dialog.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Unable to load log file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static Form CreateLogViewerDialog(string logContent, string logPath, bool dark)
+    {
+        var dialogBack = dark ? Color.FromArgb(50, 50, 50) : Color.FromArgb(230, 230, 230);
+        var editorBack = dark ? Color.FromArgb(26, 29, 34) : Color.White;
+        var editorFore = dark ? Color.FromArgb(230, 230, 230) : Color.FromArgb(30, 41, 59);
+
+        var editor = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Both,
+            WordWrap = false,
+            Font = new Font("Consolas", 9F),
+            BackColor = editorBack,
+            ForeColor = editorFore,
+            Text = logContent
+        };
+
+        var dialog = new Form
+        {
+            Text = $"Current Log - {Path.GetFileName(logPath)}",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MinimizeBox = false,
+            MaximizeBox = true,
+            ShowInTaskbar = false,
+            Size = new Size(1200, 800),
+            BackColor = dialogBack,
+            Padding = new Padding(20)
+        };
+
+        dialog.Controls.Add(editor);
+        return dialog;
     }
 
     private void btnClose_Click(object? sender, EventArgs e)
@@ -436,6 +522,7 @@ public sealed class TheForm : Form
             _chkCreateEdits.Checked = state.CreateEdits;
             _chkCreateFinal.Checked = state.CreateFinal;
             _chkSaveLog.Checked = state.SaveLog;
+            _chkShowDetailedLog.Checked = state.ShowDetailedLog;
 
             if (state.WindowWidth > 0 && state.WindowHeight > 0)
             {
@@ -466,6 +553,7 @@ public sealed class TheForm : Form
                 CreateEdits = _chkCreateEdits.Checked,
                 CreateFinal = _chkCreateFinal.Checked,
                 SaveLog = _chkSaveLog.Checked,
+                ShowDetailedLog = _chkShowDetailedLog.Checked,
                 WindowX = bounds.X,
                 WindowY = bounds.Y,
                 WindowWidth = bounds.Width,
@@ -525,6 +613,7 @@ public sealed class TheForm : Form
             _chkRemoveSource.Checked);
 
         ResetTransferUi();
+        _currentSavedLogPath = null;
         _cancellationTokenSource = new CancellationTokenSource();
         _isTransferInProgress = true;
         SetUiEnabled(false);
@@ -825,11 +914,15 @@ public sealed class TheForm : Form
             }
 
             File.WriteAllText(logFilePath, sb.ToString());
+            _currentSavedLogPath = logFilePath;
             AppendLog("Info", $"Log saved: {logFilePath}");
+            UpdateViewCurrentLogButtonState();
         }
         catch (Exception ex)
         {
             AppendLog("Error", $"Failed to save log file: {ex.Message}");
+            _currentSavedLogPath = null;
+            UpdateViewCurrentLogButtonState();
         }
     }
 
@@ -848,6 +941,7 @@ public sealed class TheForm : Form
         _btnStart.Enabled = enabled;
         _btnClearLog.Enabled = enabled && _logGrid.Rows.Count > 0;
         _btnClose.Enabled = enabled;
+        UpdateViewCurrentLogButtonState();
     }
 
     private void UpdateProgressUi(TransferProgress progress)
@@ -876,6 +970,47 @@ public sealed class TheForm : Form
         var hasLogRows = _logGrid.Rows.Count > 0;
         _btnClearLog.Visible = hasLogRows;
         _btnClearLog.Enabled = hasLogRows && !_isTransferInProgress;
+    }
+
+    private void UpdateViewCurrentLogButtonState()
+    {
+        var visible = _chkSaveLog.Checked;
+        _btnViewCurrentLog.Visible = visible;
+        _btnViewCurrentLog.Enabled =
+            visible &&
+            !_isTransferInProgress &&
+            !string.IsNullOrWhiteSpace(_currentSavedLogPath) &&
+            File.Exists(_currentSavedLogPath);
+    }
+
+    private void ApplyDetailedLogVisibility(bool isVisible)
+    {
+        if (_logCard is null || _mainLayout.RowStyles.Count <= 4)
+        {
+            return;
+        }
+
+        if (_isDetailedLogVisible == isVisible)
+        {
+            return;
+        }
+
+        _isDetailedLogVisible = isVisible;
+
+        _logCard.Visible = isVisible;
+        var logRowStyle = _mainLayout.RowStyles[4];
+        logRowStyle.SizeType = isVisible ? SizeType.Percent : SizeType.Absolute;
+        logRowStyle.Height = isVisible ? 100F : 0F;
+
+        MinimumSize = new Size(MinimumSize.Width, isVisible ? MIN_WINDOW_HEIGHT_WITH_LOG : MIN_WINDOW_HEIGHT_WITHOUT_LOG);
+        if (WindowState == FormWindowState.Normal)
+        {
+            //var adjustedHeight = Height + (isVisible ? DETAILED_LOG_HEIGHT_DELTA : -DETAILED_LOG_HEIGHT_DELTA);
+            var adjustedHeight = Height + (isVisible ? 0 : -DETAILED_LOG_HEIGHT_DELTA);
+            Height = Math.Max(MinimumSize.Height, adjustedHeight);
+        }
+
+        _mainLayout.PerformLayout();
     }
 
     private void ResetTransferUi()
