@@ -10,6 +10,7 @@ internal sealed class AppState
     public bool CreateEdits { get; set; }
     public bool CreateFinal { get; set; }
     public bool SaveLog { get; set; }
+    public bool ShowDetailedLog { get; set; }
     public int WindowX { get; set; }
     public int WindowY { get; set; }
     public int WindowWidth { get; set; }
